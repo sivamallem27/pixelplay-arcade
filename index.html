@@ -1042,22 +1042,23 @@ reg('gcube','3D Cube Runner','🧊','race','Dodge the cubes rushing at you. Arro
     c.fillStyle=front;c.fillRect(x-sz/2,y-sz/2,sz,sz);
     c.strokeStyle='#04121a';c.strokeRect(x-sz/2,y-sz/2,sz,sz);}
   function draw(){c.fillStyle='#0a0a1a';c.fillRect(0,0,W,H);
-    // Sky + ground horizon at H*0.62, road widening towards the viewer.
     c.fillStyle='#ff2d78';c.fillRect(0,H*0.62,W,H*0.38);
     c.fillStyle='#1a1030';c.beginPath();
     c.moveTo(W/2-28,H*0.62);c.lineTo(W/2+28,H*0.62);c.lineTo(W-20,H);c.lineTo(20,H);c.closePath();c.fill();
     c.strokeStyle='#00f0ff';c.lineWidth=2;
     for(let i=-1;i<=1;i++){const bx=W/2+i*90;
       c.beginPath();c.moveTo(W/2+i*14,H*0.62);c.lineTo(bx,H);c.stroke();}
-    // Far cubes first, near cubes last: near obstacles draw on top, and
-    // nothing is hidden behind the player while it is still approaching.
+    // PLAYER FIRST, obstacles after: the player cube can never cover an
+    // obstacle, even at the hit moment. Obstacles draw on top of the player.
+    const px=W/2+lane*90,py=H-90;
+    c.fillStyle='rgba(0,0,0,.4)';c.beginPath();c.ellipse(px,py+30,30,7,0,0,7);c.fill();
+    cube3D(px,py,44,'#ffe14d','#fef08a','#b45309');
     cubes.sort((a,b)=>b.z-a.z).forEach(k=>{const p=proj(k.lane*2.2,0.6,k.z,W,H),sz=p.s*1.4;
       cube3D(p.x,p.y,sz,'rgba(0,240,255,.9)','#a5f3fc','#0369a1');});
-    // Player is a 3D cube at the BOTTOM of the screen, small, so it never
-    // sits on top of the horizon where obstacles first appear.
-    const px=W/2+lane*90,py=H-90;
-    c.fillStyle='rgba(0,0,0,.4)';c.beginPath();c.ellipse(px,py+34,34,8,0,0,7);c.fill();
-    cube3D(px,py,52,'#ffe14d','#fef08a','#b45309');
+    // Horizon markers for far cubes: even if a near cube blocks the view
+    // of a far cube in the same lane, its marker at the horizon stays visible.
+    cubes.forEach(k=>{if(k.z>20){const m=proj(k.lane*2.2,0.6,60,W,H);
+      c.fillStyle='#00f0ff';c.beginPath();c.moveTo(m.x,m.y-12);c.lineTo(m.x-8,m.y+4);c.lineTo(m.x+8,m.y+4);c.closePath();c.fill();}});
     fitText(c,Math.floor(dist)+'m',W/2,44,240,'800 28px sans-serif','#ffe14d');}
   const stop=loop(dt=>{update(dt);draw();},()=>{});
   const key=e=>{if(e.key==='ArrowLeft'||e.key==='a')lane=clamp(lane-1,-1,1);
@@ -1129,18 +1130,19 @@ reg('gball','Ball Roll 3D','🔮','race','Roll down the track, grab coins, dodge
     c.fillStyle='#134';c.beginPath();c.moveTo(W/2-260,H);c.lineTo(tl.x,tl.y);c.lineTo(trr.x,trr.y);c.lineTo(W/2+260,H);c.closePath();c.fill();
     c.strokeStyle='#00f0ff';[60,30,15,8,4].forEach(z=>{const y=approachY(z),hw=28+(260-28)*(1-z/60);
       c.beginPath();c.moveTo(W/2-hw,y);c.lineTo(W/2+hw,y);c.stroke();});
-    // Far items first, near items last, so approaching items are never
-    // hidden behind the player while they are still far away.
+    // PLAYER FIRST: the ball can never cover a coin or a gap.
+    const px=W/2+bx*91,py=H-90;
+    c.fillStyle='rgba(0,0,0,.4)';c.beginPath();c.ellipse(px,py+26,24,6,0,0,7);c.fill();
+    c.fillStyle='#ff2d78';c.beginPath();c.arc(px,py,24,0,7);c.fill();
+    c.fillStyle='rgba(255,255,255,.7)';c.beginPath();c.arc(px-8,py-8,7,0,7);c.fill();
     items.sort((a,b)=>b.z-a.z).forEach(k=>{const p=proj(k.x,0,k.z,W,H),y=approachY(k.z);
       if(k.type==='coin'){c.fillStyle='#ffe14d';c.beginPath();c.arc(p.x,y,p.s*0.55,0,7);c.fill();
         c.fillStyle='rgba(255,255,255,.7)';c.beginPath();c.arc(p.x-p.s*0.18,y-p.s*0.18,p.s*0.15,0,7);c.fill();}
       else{const hw=p.s*k.w/2;c.fillStyle='#000';c.fillRect(p.x-hw,y-p.s*0.4,hw*2,p.s*0.8);}});
-    // Player ball at the BOTTOM, small, so gaps/coins travel down the
-    // screen towards it and stay visible until the hit/collect moment.
-    const px=W/2+bx*91,py=H-90;
-    c.fillStyle='rgba(0,0,0,.4)';c.beginPath();c.ellipse(px,py+30,28,7,0,0,7);c.fill();
-    c.fillStyle='#ff2d78';c.beginPath();c.arc(px,py,28,0,7);c.fill();
-    c.fillStyle='rgba(255,255,255,.7)';c.beginPath();c.arc(px-9,py-9,8,0,7);c.fill();
+    // Horizon markers for far items, drawn on top so a near item cannot hide them.
+    items.forEach(k=>{if(k.z>20){const m=proj(k.x,0,60,W,H);
+      if(k.type==='coin'){c.fillStyle='#ffe14d';c.beginPath();c.arc(m.x,approachY(60),5,0,7);c.fill();}
+      else{c.fillStyle='#ff2d78';c.beginPath();c.moveTo(m.x,approachY(60)-8);c.lineTo(m.x-6,approachY(60)+6);c.lineTo(m.x+6,approachY(60)+6);c.closePath();c.fill();}}});
     fitText(c,'🪙 '+coins,W/2,44,240,'800 26px sans-serif','#ffe14d');}
   const stop=loop(dt=>{update(dt);draw();},()=>{});
   const keys={};
@@ -1181,12 +1183,13 @@ reg('gspace','Space Blaster 3D','🌌','race','Enemies warp toward you — blast
       alive=false;ui.over(kills*100);}}
   function draw(){c.fillStyle='#020208';c.fillRect(0,0,W,H);
     c.fillStyle='#fff';stars.forEach(s=>{c.globalAlpha=clamp(s.z/10,0.2,1);c.fillRect(s.x,s.y,2,2);});c.globalAlpha=1;
+    // SHIP FIRST, foes after: a foe is never hidden behind the ship.
+    c.fillStyle='#00f0ff';c.beginPath();c.moveTo(px,H-110);c.lineTo(px-16,H-70);c.lineTo(px+16,H-70);c.closePath();c.fill();
     foes.sort((a,b)=>b.z-a.z).forEach(f=>{const p=foePos(f),sz=p.s*1.6;
       c.fillStyle=f.hp>1?'#ff2d78':'#f59e0b';
       c.beginPath();c.moveTo(p.x,p.y-sz);c.lineTo(p.x+sz,p.y+sz*0.6);c.lineTo(p.x-sz,p.y+sz*0.6);c.closePath();c.fill();
       c.fillStyle='#fff';c.beginPath();c.arc(p.x,p.y,Math.max(2,sz*0.18),0,7);c.fill();});
     c.fillStyle='#ffe14d';bullets.forEach(b=>c.fillRect(b.x-2,b.y-8,4,14));
-    c.fillStyle='#00f0ff';c.beginPath();c.moveTo(px,H-110);c.lineTo(px-16,H-70);c.lineTo(px+16,H-70);c.closePath();c.fill();
     fitText(c,'💥 '+kills,W/2,40,200,'800 24px sans-serif','#ffe14d');}
   const stop=loop(dt=>{update(dt);draw();},()=>{});
   const keys={};
