@@ -797,30 +797,49 @@ reg('gaim','Aim Trainer','🎯','reflex','30 seconds. Hit targets, avoid misses.
 LB.seeds['gstack']=seed([1500,1300,1100,900,700,500,300]);
 reg('gstack','Stack Tower','🗼','reflex','Tap to drop each block. Miss the edge and it shrinks!',(c,ui)=>{
   sizeCanvas(420,560);ui.hint('Tap / Space to drop the moving block');
-  const W=420;let stack,bx,bw,bd,by,speed,alive,score;
-  function fresh(){stack=[];bw=200;bx=W/2-bw/2;bd=1;by=520;speed=170;alive=true;score=0;ui.score(0);}
-  function drop(){if(!alive)return;
+  const W=420;let stack,bx,bw,bd,speed,alive,score,fall,cut,miss,dead,timeout;
+  // Tower grows UPWARD: first block sits on the ground (top 520), each new
+  // block lands 34px above the previous one. Camera scrolls so the moving
+  // block always stays on screen, however tall the tower gets.
+  function topOf(len){return 520-len*34;}
+  function camOff(){return Math.max(0,180-topOf(stack.length+1));}
+  function fresh(){stack=[];bw=200;bx=W/2-bw/2;bd=1;speed=170;alive=true;score=0;fall=null;cut=null;miss=null;dead=false;ui.score(0);}
+  function drop(){if(!alive||fall||miss)return;
     const prev=stack.length?stack[stack.length-1]:{x:0,w:W};
     const nx=Math.max(bx,prev.x),nx2=Math.min(bx+bw,prev.x+prev.w);
-    if(nx2<=nx){alive=false;ui.over(score);return;}
-    bx=nx;bw=nx2-nx;by-=34;stack.push({x:bx,w:bw});score+=100;ui.score(score);
+    if(nx2<=nx){miss={x:bx,w:bw,y:topOf(stack.length+1),vy:0};alive=false;
+      timeout=setTimeout(()=>{if(!dead)ui.over(score);},600);return;}
+    // Cut-off overhang piece falls away, visibly, instead of vanishing.
+    if(bx<prev.x)cut={x:bx,w:prev.x-bx,y:topOf(stack.length+1),vy:0,rot:0};
+    else if(bx+bw>prev.x+prev.w)cut={x:prev.x+prev.w,w:bx+bw-(prev.x+prev.w),y:topOf(stack.length+1),vy:0,rot:0};
+    fall={x:nx,w:nx2-nx,from:topOf(stack.length+1),to:topOf(stack.length),t:0};
+    bx=nx;bw=nx2-nx;score+=100;ui.score(score);
     bd=bd>0?-1:1;speed+=14;}
-  function update(dt){if(!alive)return;bx+=bd*speed*dt;
-    if(bx<=0){bx=0;bd=1;}if(bx+bw>=W){bx=W-bw;bd=-1;}}
+  function update(dt){if(!alive&&!miss&&!fall)return;
+    if(!fall&&!miss){bx+=bd*speed*dt;
+      if(bx<=0){bx=0;bd=1;}if(bx+bw>=W){bx=W-bw;bd=-1;}}
+    if(fall){fall.t+=dt/0.18;if(fall.t>=1){stack.push({x:fall.x,w:fall.w});fall=null;}}
+    if(cut){cut.vy+=1400*dt;cut.y+=cut.vy*dt;cut.rot+=dt*4;if(cut.y>600)cut=null;}
+    if(miss){miss.vy+=1400*dt;miss.y+=miss.vy*dt;}}
   function draw(){c.fillStyle='#0d0d18';c.fillRect(0,0,W,560);
-    const off=Math.max(0,by-300);
-    c.fillStyle='#23233a';c.fillRect(0,552-off,W,8);
-    stack.forEach((s,i)=>{const yy=552-off-34*(stack.length-i);
-      c.fillStyle=`hsl(${190-i*8},80%,${55-i*2}%)`;c.fillRect(s.x,yy-32,s.w,30);});
-    c.fillStyle='#00f0ff';const my=552-off-34*(stack.length+1);
-    c.fillRect(bx,my-32,bw,30);
+    const off=camOff();
+    c.fillStyle='#23233a';c.fillRect(0,552+off,W,8);
+    stack.forEach((s,i)=>{const top=topOf(i+1)+off;
+      c.fillStyle=`hsl(${190-i*8},80%,${55-i*2}%)`;c.fillRect(s.x,top,s.w,30);});
+    if(cut){c.save();c.translate(cut.x+cut.w/2,cut.y+off+15);c.rotate(cut.rot);
+      c.fillStyle='#ff2d78';c.fillRect(-cut.w/2,-15,cut.w,30);c.restore();}
+    if(miss){c.fillStyle='#ff2d78';c.fillRect(miss.x,miss.y+off,miss.w,30);}
+    else if(fall){const y=fall.from+(fall.to-fall.from)*Math.min(1,fall.t);
+      c.fillStyle='#00f0ff';c.fillRect(fall.x,y+off,fall.w,30);}
+    else if(alive){const my=topOf(stack.length+1)+off;
+      c.fillStyle='#00f0ff';c.fillRect(bx,my,bw,30);}
     fitText(c,'🏗 '+score,W/2,32,200,'800 22px sans-serif');}
   const stop=loop(dt=>{update(dt);draw();},()=>{});
   const kd=e=>{if(e.key===' '){drop();e.preventDefault();}};
   const pd=e=>{drop();e.preventDefault();};
   document.addEventListener('keydown',kd);cv.addEventListener('pointerdown',pd);
   fresh();
-  return ()=>{stop();document.removeEventListener('keydown',kd);cv.removeEventListener('pointerdown',pd);};
+  return ()=>{dead=true;stop();clearTimeout(timeout);document.removeEventListener('keydown',kd);cv.removeEventListener('pointerdown',pd);};
 });
 /* --- Colour Rush --- */
 LB.seeds['gcolor']=seed([1600,1350,1100,900,700,500,300]);
