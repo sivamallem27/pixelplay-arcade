@@ -1026,21 +1026,38 @@ reg('gcube','3D Cube Runner','🧊','race','Dodge the cubes rushing at you. Arro
   const W=420,H=560;let lane,cubes,dist,alive,speed,t;
   function fresh(){lane=0;cubes=[];dist=0;alive=true;speed=9;t=0;ui.score(0);}
   function update(dt){if(!alive)return;t+=dt;dist+=dt*10;speed+=dt*0.35;ui.score(Math.floor(dist));
-    if(t>0.55){t=0;cubes.push({lane:ri(-1,1),z:60,spin:rnd(0,6)});}
-    cubes.forEach(k=>{k.z-=speed*dt*6;k.spin+=dt*3;});
+    if(t>0.55){t=0;cubes.push({lane:ri(-1,1),z:60});}
+    cubes.forEach(k=>{k.z-=speed*dt*6;});
     cubes=cubes.filter(k=>k.z>2);
-    if(cubes.some(k=>k.z<9&&k.z>4&&k.lane===lane)){alive=false;ui.over(Math.floor(dist));}}
+    // Hit only when the cube has visually reached the player at the bottom
+    // of the screen (z <= 5.5), not while it is still far above the player.
+    if(cubes.some(k=>k.z<5.5&&k.lane===lane)){alive=false;ui.over(Math.floor(dist));}}
+  // Draw a cube with three faces so it reads as 3D, not a flat square.
+  function cube3D(x,y,sz,front,top,side){
+    const o=sz*0.28;
+    c.fillStyle=top;c.beginPath();
+    c.moveTo(x-sz/2,y-sz/2);c.lineTo(x+sz/2,y-sz/2);c.lineTo(x+sz/2+o,y-sz/2-o);c.lineTo(x-sz/2+o,y-sz/2-o);c.closePath();c.fill();
+    c.fillStyle=side;c.beginPath();
+    c.moveTo(x+sz/2,y-sz/2);c.lineTo(x+sz/2+o,y-sz/2-o);c.lineTo(x+sz/2+o,y+sz/2-o);c.lineTo(x+sz/2,y+sz/2);c.closePath();c.fill();
+    c.fillStyle=front;c.fillRect(x-sz/2,y-sz/2,sz,sz);
+    c.strokeStyle='#04121a';c.strokeRect(x-sz/2,y-sz/2,sz,sz);}
   function draw(){c.fillStyle='#0a0a1a';c.fillRect(0,0,W,H);
+    // Sky + ground horizon at H*0.62, road widening towards the viewer.
     c.fillStyle='#ff2d78';c.fillRect(0,H*0.62,W,H*0.38);
+    c.fillStyle='#1a1030';c.beginPath();
+    c.moveTo(W/2-28,H*0.62);c.lineTo(W/2+28,H*0.62);c.lineTo(W-20,H);c.lineTo(20,H);c.closePath();c.fill();
     c.strokeStyle='#00f0ff';c.lineWidth=2;
-    for(let i=0;i<=6;i++){const p=proj(-3+i,0,4,W,H),q=proj(-3+i,0,60,W,H);
-      c.beginPath();c.moveTo(p.x,p.y);c.lineTo(q.x,q.y);c.stroke();}
-    cubes.sort((a,b)=>a.z-b.z).forEach(k=>{const p=proj(k.lane*2.2,0.6,k.z,W,H),sz=p.s*1.4;
-      c.save();c.translate(p.x,p.y);c.rotate(k.spin);
-      c.fillStyle='rgba(0,240,255,.85)';c.fillRect(-sz/2,-sz/2,sz,sz);
-      c.strokeStyle='#04121a';c.strokeRect(-sz/2,-sz/2,sz,sz);c.restore();});
-    const pl=proj(lane*2.2,0.4,8,W,H);
-    c.fillStyle='#ffe14d';c.beginPath();c.arc(pl.x,pl.y,pl.s*0.8,0,7);c.fill();
+    for(let i=-1;i<=1;i++){const bx=W/2+i*90;
+      c.beginPath();c.moveTo(W/2+i*14,H*0.62);c.lineTo(bx,H);c.stroke();}
+    // Far cubes first, near cubes last: near obstacles draw on top, and
+    // nothing is hidden behind the player while it is still approaching.
+    cubes.sort((a,b)=>b.z-a.z).forEach(k=>{const p=proj(k.lane*2.2,0.6,k.z,W,H),sz=p.s*1.4;
+      cube3D(p.x,p.y,sz,'rgba(0,240,255,.9)','#a5f3fc','#0369a1');});
+    // Player is a 3D cube at the BOTTOM of the screen, small, so it never
+    // sits on top of the horizon where obstacles first appear.
+    const px=W/2+lane*90,py=H-90;
+    c.fillStyle='rgba(0,0,0,.4)';c.beginPath();c.ellipse(px,py+34,34,8,0,0,7);c.fill();
+    cube3D(px,py,52,'#ffe14d','#fef08a','#b45309');
     fitText(c,Math.floor(dist)+'m',W/2,44,240,'800 28px sans-serif','#ffe14d');}
   const stop=loop(dt=>{update(dt);draw();},()=>{});
   const key=e=>{if(e.key==='ArrowLeft'||e.key==='a')lane=clamp(lane-1,-1,1);
