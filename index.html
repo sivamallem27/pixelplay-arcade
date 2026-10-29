@@ -856,11 +856,11 @@ reg('gcolor','Colour Rush','🌈','reflex','Tap the button matching the INK colo
 LB.seeds['gttt']=seed([300,300,300,100,100,100,100]);
 reg('gttt','Tic-Tac-Toe vs AI','⭕','board','You are X. Beat the computer: win = 300, draw = 100.',(c,ui)=>{
   sizeCanvas(420,480);ui.hint('You play X — tap a square');
-  let b,alive,score;
+  let b,alive,score,last,lastT,winLine,winT,dead;
   const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-  function fresh(){b=Array(9).fill('');alive=true;score=0;ui.score(0);draw();}
-  function winner(bd){for(const w of wins)if(bd[w[0]]&&bd[w[0]]===bd[w[1]]&&bd[w[1]]===bd[w[2]])return bd[w[0]];
-    return bd.every(x=>x)?'D':null;}
+  function fresh(){b=Array(9).fill('');alive=true;score=0;last=-1;lastT=0;winLine=null;winT=0;dead=false;ui.score(0);draw();}
+  function winner(bd){for(const w of wins)if(bd[w[0]]&&bd[w[0]]===bd[w[1]]&&bd[w[1]]===bd[w[2]])return {p:bd[w[0]],line:w};
+    return bd.every(x=>x)?{p:'D',line:null}:null;}
   function aiMove(){const e=b.map((x,i)=>x?null:i).filter(x=>x!==null);
     for(const w of wins){const line=w.map(i=>b[i]);
       if(line.filter(x=>x==='O').length===2&&line.includes(''))return w[line.indexOf('')];
@@ -871,25 +871,34 @@ reg('gttt','Tic-Tac-Toe vs AI','⭕','board','You are X. Beat the computer: win 
   function draw(){c.fillStyle='#0d0d18';c.fillRect(0,0,420,480);
     b.forEach((v,i)=>{const x=60+(i%3)*105,y=90+Math.floor(i/3)*105;
       c.fillStyle='#23233a';c.beginPath();c.roundRect(x,y,95,95,12);c.fill();
-      if(v)fitText(c,v==='X'?'✖':'⭕',x+47,y+50,70,'56px sans-serif',v==='X'?'#00f0ff':'#ff2d78');});
+      if(v){let sc=1;if(i===last){const p=Math.min(1,lastT/0.28);sc=0.3+0.9*(1-Math.pow(1-p,3));}
+        c.save();c.translate(x+47,y+50);c.scale(sc,sc);
+        fitText(c,v==='X'?'✖':'⭕',0,0,70,'56px sans-serif',v==='X'?'#00f0ff':'#ff2d78');c.restore();}});
+    if(winLine){const p=Math.min(1,winT/0.45);
+      const a=winLine[0],z=winLine[2];
+      const ax=60+(a%3)*105+47,ay=90+Math.floor(a/3)*105+50,zx=60+(z%3)*105+47,zy=90+Math.floor(z/3)*105+50;
+      c.strokeStyle='#ffe14d';c.lineWidth=6;c.beginPath();c.moveTo(ax,ay);c.lineTo(ax+(zx-ax)*p,ay+(zy-ay)*p);c.stroke();}
     fitText(c,'You: ✖   AI: ⭕',210,450,300,'16px sans-serif','#9aa0b5');}
+  const stop=loop(dt=>{if(dead)return;lastT+=dt;winT+=dt;draw();},()=>{});
   const click=e=>{if(!alive)return;const r=cv.getBoundingClientRect();
     const mx=(e.clientX-r.left)*cv.width/r.width,my=(e.clientY-r.top)*cv.height/r.height;
     const q=Math.floor((mx-60)/105),rr=Math.floor((my-90)/105);
     if(q<0||q>2||rr<0||rr>2)return;const i=rr*3+q;if(b[i])return;
-    b[i]='X';let w=winner(b);
-    if(!w){b[aiMove()]='O';w=winner(b);}
+    b[i]='X';last=i;lastT=0;let w=winner(b);
+    if(!w){const ai=aiMove();b[ai]='O';last=ai;lastT=0;w=winner(b);}
+    if(w&&w.line){winLine=w.line;winT=0;}
     draw();
-    if(w){alive=false;score=w==='X'?300:w==='D'?100:0;ui.score(score);setTimeout(()=>ui.over(score),500);}};
+    if(w){alive=false;score=w.p==='X'?300:w.p==='D'?100:0;ui.score(score);setTimeout(()=>{if(!dead)ui.over(score);},900);}};
   cv.addEventListener('pointerdown',click);fresh();
-  return ()=>cv.removeEventListener('pointerdown',click);
+  return ()=>{dead=true;stop();cv.removeEventListener('pointerdown',click);};
 });
+
 /* --- Connect Four vs AI --- */
 LB.seeds['gconn']=seed([500,500,500,150,150,150,150]);
 reg('gconn','Connect Four vs AI','🔴','board','Drop discs, connect four. Win = 500, draw = 150.',(c,ui)=>{
   sizeCanvas(460,540);ui.hint('Tap a column to drop your 🔵 disc');
-  const R=6,Q=7,cell=58,ox=27,oy=90;let b,alive,score,turn;
-  function fresh(){b=Array.from({length:R},()=>Array(Q).fill(''));alive=true;score=0;turn='B';ui.score(0);draw();}
+  const R=6,Q=7,cell=58,ox=27,oy=90;let b,alive,score,turn,ghosts,dead;
+  function fresh(){b=Array.from({length:R},()=>Array(Q).fill(''));alive=true;score=0;turn='B';ghosts=[];dead=false;ui.score(0);draw();}
   function drop(q,p){for(let r=R-1;r>=0;r--)if(!b[r][q]){b[r][q]=p;return r;}return -1;}
   function win(p){for(let r=0;r<R;r++)for(let q=0;q<Q;q++){if(b[r][q]!==p)continue;
     if(q+3<Q&&b[r][q+1]===p&&b[r][q+2]===p&&b[r][q+3]===p)return true;
@@ -906,32 +915,40 @@ reg('gconn','Connect Four vs AI','🔴','board','Drop discs, connect four. Win =
     c.fillStyle='#1a2f6e';c.beginPath();c.roundRect(ox-8,oy-8,Q*cell+16,R*cell+16,14);c.fill();
     for(let r=0;r<R;r++)for(let q=0;q<Q;q++){const x=ox+q*cell+cell/2,y=oy+r*cell+cell/2;
       c.fillStyle=b[r][q]==='B'?'#3b82f6':b[r][q]==='R'?'#ef4444':'#0d0d18';
-      c.beginPath();c.arc(x,y,cell/2-6,0,7);c.fill();}}
+      c.beginPath();c.arc(x,y,cell/2-6,0,7);c.fill();if(b[r][q]){c.fillStyle='rgba(255,255,255,.35)';c.beginPath();c.arc(x-8,y-8,6,0,7);c.fill();}}
+    // Falling ghost discs: the disc visibly drops into its column, then merges.
+    ghosts.forEach(g=>{c.fillStyle=g.p==='B'?'#3b82f6':'#ef4444';c.globalAlpha=0.95;
+      c.beginPath();c.arc(ox+g.q*cell+cell/2,g.y,cell/2-6,0,7);c.fill();c.globalAlpha=1;});}
+  const stop=loop(dt=>{if(dead)return;
+    ghosts.forEach(g=>{g.vy+=2600*dt;g.y+=g.vy*dt;if(g.y>=g.target){g.y=g.target;g.done=true;}});
+    ghosts=ghosts.filter(g=>!g.done||g.y<g.target+1&&false);ghosts=ghosts.filter(g=>!g.done);
+    draw();},()=>{});
   const click=e=>{if(!alive||turn!=='B')return;const r=cv.getBoundingClientRect();
     const mx=(e.clientX-r.left)*cv.width/r.width;const q=clamp(Math.floor((mx-ox)/cell),0,Q-1);
-    if(b[0][q])return;drop(q,'B');turn='R';
-    if(win('B')){draw();alive=false;score=500;ui.score(500);setTimeout(()=>ui.over(500),500);return;}
-    if(full()){draw();alive=false;ui.score(150);setTimeout(()=>ui.over(150),500);return;}
-    setTimeout(()=>{if(!alive)return;drop(ai(),'R');turn='B';draw();
-      if(win('R')){alive=false;setTimeout(()=>ui.over(0),500);}
-      else if(full()){alive=false;ui.score(150);setTimeout(()=>ui.over(150),500);}},450);
+    if(b[0][q])return;const rr=drop(q,'B');ghosts.push({q,p:'B',y:oy-40,vy:0,target:oy+rr*cell+cell/2});turn='R';
+    if(win('B')){draw();alive=false;score=500;ui.score(500);setTimeout(()=>{if(!dead)ui.over(500);},900);return;}
+    if(full()){draw();alive=false;ui.score(150);setTimeout(()=>{if(!dead)ui.over(150);},900);return;}
+    setTimeout(()=>{if(!alive||dead)return;const aq=ai();const ar=drop(aq,'R');ghosts.push({q:aq,p:'R',y:oy-40,vy:0,target:oy+ar*cell+cell/2});turn='B';draw();
+      if(win('R')){alive=false;setTimeout(()=>{if(!dead)ui.over(0);},900);}
+      else if(full()){alive=false;ui.score(150);setTimeout(()=>{if(!dead)ui.over(150);},900);}},450);
     draw();};
   cv.addEventListener('pointerdown',click);fresh();
-  return ()=>cv.removeEventListener('pointerdown',click);
+  return ()=>{dead=true;stop();cv.removeEventListener('pointerdown',click);};
 });
+
 /* --- Blackjack 21 --- */
 LB.seeds['gbj']=seed([380,320,260,210,170,130,90]);
 reg('gbj','Blackjack 21','🂡','board','Start with 100 chips, bet 10 a hand. Hit or stand — cash out anytime!',(c,ui)=>{
   sizeCanvas(440,540);ui.hint('Tap HIT for a card, STAND to hold, CASH OUT to bank it');
-  let deck,ph,dh,bank,bet,phase,msg;
-  function fresh(){bank=100;bet=10;newHand();ui.score(bank);}
+  let deck,ph,dh,bank,bet,phase,msg,slide,flipT,dead;
+  function fresh(){bank=100;bet=10;dead=false;slide=0;flipT=0;newHand();ui.score(bank);}
   function newDeck(){const d=[];for(let s=0;s<4;s++)for(let v=1;v<=13;v++)d.push(Math.min(v,10));
     return d.sort(()=>Math.random()-.5);}
   function val(h){let t=h.reduce((a,b)=>a+b,0),a=h.filter(x=>x===1).length;
     while(a&&t+10<=21){t+=10;a--;}return t;}
   function newHand(){if(bank<bet){ui.over(bank);return;}
     deck=newDeck();ph=[deck.pop(),deck.pop()];dh=[deck.pop(),deck.pop()];
-    phase='play';msg='Hit or stand?';
+    phase='play';msg='Hit or stand?';slide=0;flipT=0;
     if(val(ph)===21)settle();draw();}
   function settle(){phase='done';const p=val(ph),d=val(dh);
     if(p>21){bank-=bet;msg='Bust! -10';}
@@ -939,80 +956,127 @@ reg('gbj','Blackjack 21','🂡','board','Start with 100 chips, bet 10 a hand. Hi
       if(dd>21||p>dd){bank+=bet;msg='You win! +10';}
       else if(p===dd){msg='Push — bet back';}
       else{bank-=bet;msg='Dealer wins -10';}}
-    ui.score(bank);draw();
-    if(bank<=0)setTimeout(()=>ui.over(0),900);}
+    flipT=0;ui.score(bank);draw();
+    if(bank<=0)setTimeout(()=>{if(!dead)ui.over(0);},1200);}
+  function card(v){return v===1?'A':v===10?'10':String(v);}
+  function drawCard(x,y,v,hidden,slideOff,flip){c.save();c.translate(x,y);
+    if(flip<1&&hidden){const w=54*Math.abs(Math.cos(flip*Math.PI/2));c.fillStyle='#7c3aed';c.beginPath();c.roundRect(-w/2,-36,w,72,8);c.fill();c.restore();return;}
+    c.translate(slideOff,0);c.fillStyle='#fff';c.beginPath();c.roundRect(-27,-36,54,72,8);c.fill();
+    c.strokeStyle='#04121a';c.stroke();fitText(c,hidden?'?':card(v),0,4,44,'800 22px sans-serif','#04121a');c.restore();}
   function draw(){c.fillStyle='#0d2b18';c.fillRect(0,0,440,540);
     fitText(c,'🂡 BLACKJACK',220,36,260,'800 22px sans-serif','#ffe14d');
-    fitText(c,'Dealer: '+dh.map((_,i)=>i===0&&phase==='play'?'🂠':card(dh[i])).join(' ')+'  ('+(phase==='play'?'?':val(dh))+')',220,110,400,'20px sans-serif');
-    fitText(c,'You: '+ph.map(card).join(' ')+'  ('+val(ph)+')',220,220,400,'20px sans-serif');
-    fitText(c,msg,220,290,400,'800 20px sans-serif','#ffe14d');
-    fitText(c,'Bank: '+bank+' chips   Bet: '+bet,220,330,360,'17px sans-serif','#9aa0b5');
-    btn(40,380,110,52,'HIT','#22c55e');btn(165,380,110,52,'STAND','#3b82f6');
-    btn(290,380,110,52,'DEAL','#23233a');btn(150,450,140,44,'💰 CASH OUT','#eab308');}
-  function card(v){return v===1?'A':v===10?'10':String(v);}
-  function btn(x,y,w,h,t,bg){c.fillStyle=phase!=='play'&&t!=='DEAL'&&t!=='💰 CASH OUT'?'#1a1a2e':bg;
+    fitText(c,'Dealer  ('+(phase==='play'?'?':val(dh))+')',220,70,400,'17px sans-serif','#9aa0b5');
+    dh.forEach((v,i)=>drawCard(80+i*70,130,v,i===0&&phase==='play',i===dh.length-1?Math.max(0,60-slide*200):0,flipT));
+    fitText(c,'You  ('+val(ph)+')',220,230,400,'17px sans-serif','#9aa0b5');
+    ph.forEach((v,i)=>drawCard(80+i*70,280,v,false,i===ph.length-1?Math.max(0,60-slide*200):0,1));
+    fitText(c,msg,220,380,400,'800 20px sans-serif','#ffe14d');
+    fitText(c,'Bank: '+bank+' chips   Bet: '+bet,220,415,360,'17px sans-serif','#9aa0b5');
+    btn(40,440,110,52,'HIT','#22c55e');btn(165,440,110,52,'STAND','#3b82f6');
+    btn(290,440,110,52,'DEAL','#23233a');btn(150,500,140,36,'💰 CASH OUT','#eab308');}
+  function btn(x,y,w,h,t,bg){c.fillStyle=phase!=='play'&&t!=='DEAL'?'#1a1a2e':bg;
     c.beginPath();c.roundRect(x,y,w,h,10);c.fill();fitText(c,t,x+w/2,y+h/2,w-10,'800 16px sans-serif',bg==='#23233a'?'#9aa0b5':'#04121a');}
+  const stop=loop(dt=>{if(dead)return;slide=Math.min(1,slide+dt*3);if(phase==='done')flipT=Math.min(1,flipT+dt*2.5);draw();},()=>{});
   const click=e=>{const r=cv.getBoundingClientRect();
     const mx=(e.clientX-r.left)*cv.width/r.width,my=(e.clientY-r.top)*cv.height/r.height;
     const hit=(x,y,w,h)=>mx>x&&mx<x+w&&my>y&&my<y+h;
-    if(hit(150,450,140,44)){ui.over(bank);return;}
-    if(hit(290,380,110,52)){if(phase==='done')newHand();return;}
-    if(phase!=='play')return;
-    if(hit(40,380,110,52)){ph.push(deck.pop());if(val(ph)>=21)settle();draw();}
-    else if(hit(165,380,110,52))settle();};
+    if(hit(150,500,140,36)){ui.over(bank);return;}
+    if(hit(40,440,110,52)&&phase==='play'){ph.push(deck.pop());slide=0;if(val(ph)>=21)settle();draw();}
+    else if(hit(165,440,110,52)&&phase==='play')settle();
+    else if(hit(290,440,110,52)&&phase==='done')newHand();};
   cv.addEventListener('pointerdown',click);fresh();
-  return ()=>cv.removeEventListener('pointerdown',click);
+  return ()=>{dead=true;stop();cv.removeEventListener('pointerdown',click);};
 });
+
 /* --- Dice Duel --- */
 LB.seeds['gdice']=seed([520,470,420,370,320,270,220]);
 reg('gdice','Dice Duel','🎲','board','5 rounds vs the AI. Higher roll takes the round!',(c,ui)=>{
   sizeCanvas(420,520);ui.hint('Tap ROLL each round — highest total wins the round');
-  const faces=['⚀','⚁','⚂','⚃','⚄','⚅'];let round,pw,aw,phase,pr,ar,msg;
-  function fresh(){round=0;pw=0;aw=0;next();ui.score(0);}
-  function next(){round++;phase='roll';msg='Round '+round+'/5 — tap ROLL';draw();}
+  let round,pw,aw,phase,pr,ar,msg,rollT,faceT,revealT,parts,dead,timeout;
+  const PIPS={1:[[0,0]],2:[[-1,-1],[1,1]],3:[[-1,-1],[0,0],[1,1]],4:[[-1,-1],[-1,1],[1,-1],[1,1]],5:[[-1,-1],[-1,1],[0,0],[1,-1],[1,1]],6:[[-1,-1],[-1,0],[-1,1],[1,-1],[1,0],[1,1]]};
+  function fresh(){round=0;pw=0;aw=0;dead=false;parts=[];next();ui.score(0);}
+  function next(){round++;phase='roll';msg='Round '+round+'/5 — tap ROLL';pr=0;ar=0;rollT=0;faceT=0;revealT=0;}
+  function confetti(){for(let i=0;i<24;i++)parts.push({x:210,y:220,vx:rnd(-160,160),vy:rnd(-260,-60),a:1,col:['#ffe14d','#00f0ff','#ff2d78','#22c55e'][ri(0,3)]});}
+  function die(x,y,sz,val,rot,sc,dim,glow){c.save();c.translate(x,y);c.rotate(rot);c.scale(sc,sc);
+    if(glow){c.strokeStyle='#ffe14d';c.lineWidth=5;c.beginPath();c.arc(0,0,sz*0.85,0,7);c.stroke();}
+    c.globalAlpha=dim?0.45:1;c.fillStyle='#fff';c.shadowColor='rgba(0,0,0,.5)';c.shadowBlur=10;
+    c.beginPath();c.roundRect(-sz/2,-sz/2,sz,sz,14);c.fill();c.shadowBlur=0;c.strokeStyle='#04121a';c.stroke();
+    if(val){c.fillStyle='#04121a';PIPS[val].forEach(p=>{c.beginPath();c.arc(p[0]*sz*0.26,p[1]*sz*0.26,sz*0.09,0,7);c.fill();});}
+    else fitText(c,'?',0,4,40,'800 36px sans-serif','#9aa0b5');
+    c.restore();c.globalAlpha=1;}
   function draw(){c.fillStyle='#0d0d18';c.fillRect(0,0,420,520);
     fitText(c,'🎲 DICE DUEL',210,44,260,'800 24px sans-serif');
     fitText(c,'You '+pw+' — '+aw+' AI',210,96,260,'800 20px sans-serif');
-    if(phase==='done'){fitText(c,'You: '+faces[pr-1],110,220,120,'72px sans-serif');
-      fitText(c,'AI: '+faces[ar-1],310,220,120,'72px sans-serif');fitText(c,msg,210,330,380,'800 20px sans-serif','#ffe14d');}
-    else fitText(c,msg,210,240,380,'18px sans-serif','#9aa0b5');
-    c.fillStyle='#00f0ff';c.beginPath();c.roundRect(150,380,120,56,12);c.fill();
+    for(let i=0;i<5;i++){c.fillStyle=i<round-1?'#22c55e':i===round-1?'#ffe14d':'#23233a';c.beginPath();c.arc(150+i*30,130,8,0,7);c.fill();}
+    let bounce=0,rot=0,sc=1,rv=pr,av=ar;
+    if(phase==='rolling'){bounce=Math.abs(Math.sin(rollT*22))*22;rot=Math.sin(rollT*16)*0.35;rv=ri(1,6);av=ri(1,6);}
+    if(phase==='done'){const p=Math.min(1,revealT/0.35);sc=0.6+0.5*(1-Math.pow(1-p,3));}
+    const win = phase==='done' ? (pr>ar?'you':ar>pr?'ai':'draw') : null;
+    die(110,220-bounce,110,rv,rot,sc,win==='ai',win==='you');
+    die(310,220-bounce,110,av,-rot,sc,win==='you',win==='ai');
+    parts.forEach(p=>{c.globalAlpha=Math.max(0,p.a);c.fillStyle=p.col;c.fillRect(p.x,p.y,6,6);});c.globalAlpha=1;
+    fitText(c,phase==='done'?msg:(phase==='rolling'?'Rolling…':msg),210,330,380,phase==='done'?'800 20px sans-serif':'18px sans-serif',phase==='done'?'#ffe14d':'#9aa0b5');
+    const pulse=phase==='roll'?1+Math.sin(Date.now()/200)*0.06:1;
+    c.fillStyle='#00f0ff';c.beginPath();c.roundRect(150-(120*pulse-120)/2,380,120*pulse,56,12);c.fill();
     fitText(c,'ROLL',210,408,100,'800 20px sans-serif','#04121a');}
+  const stop=loop(dt=>{if(dead)return;
+    if(phase==='rolling'){rollT+=dt;if(rollT>=0.9){phase='done';revealT=0;if(pr>ar)confetti();}}
+    if(phase==='done')revealT+=dt;
+    parts.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=500*dt;p.a-=dt*0.9;});parts=parts.filter(p=>p.a>0);
+    draw();},()=>{});
   const click=e=>{if(phase!=='roll')return;const r=cv.getBoundingClientRect();
     const mx=(e.clientX-r.left)*cv.width/r.width,my=(e.clientY-r.top)*cv.height/r.height;
     if(mx<150||mx>270||my<380||my>436)return;
-    pr=ri(1,6);ar=ri(1,6);phase='done';
+    pr=ri(1,6);ar=ri(1,6);phase='rolling';rollT=0;
     if(pr>ar){pw++;msg='You take the round!';}else if(ar>pr){aw++;msg='AI takes it…';}else msg='Draw — no point';
-    ui.score(pw*100+Math.max(0,(pw-aw))*10);draw();
-    setTimeout(()=>{if(round>=5){ui.over(pw*100+Math.max(0,(pw-aw))*10);}else next();},1100);};
+    ui.score(pw*100+Math.max(0,(pw-aw))*10);
+    timeout=setTimeout(()=>{if(dead)return;if(round>=5){ui.over(pw*100+Math.max(0,(pw-aw))*10);}else next();},1900);};
   cv.addEventListener('pointerdown',click);fresh();
-  return ()=>cv.removeEventListener('pointerdown',click);
+  return ()=>{dead=true;stop();clearTimeout(timeout);cv.removeEventListener('pointerdown',click);};
 });
+
 /* --- RPS League --- */
 LB.seeds['grps']=seed([800,700,600,500,400,300,200]);
 reg('grps','RPS League','✊','board','10 rounds of rock-paper-scissors vs the AI.',(c,ui)=>{
   sizeCanvas(420,520);ui.hint('Pick rock, paper or scissors — 10 rounds');
-  const em={R:'✊',P:'✋',S:'✌️'};let round,w,l,d,phase,pr,ar,msg;
-  function fresh(){round=0;w=0;l=0;d=0;phase='pick';msg='Round 1/10 — choose!';ui.score(0);draw();}
+  const em={R:'✊',P:'✋',S:'✌️'};let round,w,l,d,phase,pr,ar,msg,shakeT,revealT,parts,dead,timeout;
+  function fresh(){round=0;w=0;l=0;d=0;phase='pick';msg='Round 1/10 — choose!';shakeT=0;revealT=0;parts=[];dead=false;ui.score(0);draw();}
+  function confetti(){for(let i=0;i<20;i++)parts.push({x:210,y:210,vx:rnd(-150,150),vy:rnd(-240,-60),a:1,col:['#ffe14d','#00f0ff','#ff2d78','#22c55e'][ri(0,3)]});}
+  function hand(x,y,emoji,bounce,rot,sc,dim,glow){c.save();c.translate(x,y+bounce);c.rotate(rot);c.scale(sc,sc);
+    if(glow){c.strokeStyle='#ffe14d';c.lineWidth=5;c.beginPath();c.arc(0,0,62,0,7);c.stroke();}
+    c.globalAlpha=dim?0.4:1;fitText(c,emoji,0,0,120,'76px sans-serif');c.restore();c.globalAlpha=1;}
   function draw(){c.fillStyle='#0d0d18';c.fillRect(0,0,420,520);
     fitText(c,'✊✋✌️ RPS LEAGUE',210,44,300,'800 24px sans-serif');
     fitText(c,'W '+w+' · D '+d+' · L '+l,210,96,260,'800 20px sans-serif');
-    if(phase==='done'){fitText(c,em[pr]+'  vs  '+em[ar],210,210,300,'64px sans-serif');fitText(c,msg,210,300,380,'800 20px sans-serif','#ffe14d');}
+    let yb=0,rot=0,sc=1,pe=em[pr],ae=em[ar];
+    if(phase==='shake'){yb=-Math.abs(Math.sin(shakeT*20))*24;rot=Math.sin(shakeT*18)*0.2;pe='✊';ae='✊';}
+    if(phase==='done'){const p=Math.min(1,revealT/0.3);sc=0.6+0.5*(1-Math.pow(1-p,3));}
+    const win = phase==='done' ? (msg.indexOf('You win')>=0?'you':msg.indexOf('AI wins')>=0?'ai':'draw') : null;
+    if(phase!=='pick'){hand(110,210,pe,yb,rot,sc,win==='ai',win==='you');hand(310,210,ae,-yb,-rot,sc,win==='you',win==='ai');
+      fitText(c,'vs',210,210,60,'800 20px sans-serif','#9aa0b5');}
     else fitText(c,msg,210,230,380,'18px sans-serif','#9aa0b5');
+    parts.forEach(p=>{c.globalAlpha=Math.max(0,p.a);c.fillStyle=p.col;c.fillRect(p.x,p.y,6,6);});c.globalAlpha=1;
+    if(phase==='done')fitText(c,msg,210,300,380,'800 20px sans-serif','#ffe14d');
+    if(phase==='shake')fitText(c,'Rock… paper… scissors…',210,300,380,'18px sans-serif','#9aa0b5');
     [['R',60],['P',180],['S',300]].forEach(([k,x])=>{c.fillStyle='#23233a';c.beginPath();c.roundRect(x,380,100,90,14);c.fill();
       fitText(c,em[k],x+50,425,80,'52px sans-serif');});}
+  const stop=loop(dt=>{if(dead)return;
+    if(phase==='shake'){shakeT+=dt;if(shakeT>=0.8){phase='done';revealT=0;if(msg.indexOf('You win')>=0)confetti();}}
+    if(phase==='done')revealT+=dt;
+    parts.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=500*dt;p.a-=dt*0.9;});parts=parts.filter(p=>p.a>0);
+    draw();},()=>{});
   const click=e=>{if(phase!=='pick')return;const r=cv.getBoundingClientRect();
     const mx=(e.clientX-r.left)*cv.width/r.width,my=(e.clientY-r.top)*cv.height/r.height;
     if(my<380||my>470)return;
-    pr=mx<160?'R':mx<280?'P':'S';ar=['R','P','S'][ri(0,2)];phase='done';round++;
+    pr=mx<160?'R':mx<280?'P':'S';ar=['R','P','S'][ri(0,2)];phase='shake';shakeT=0;round++;
     if(pr===ar){d++;msg='Draw!';}
     else if((pr==='R'&&ar==='S')||(pr==='P'&&ar==='R')||(pr==='S'&&ar==='P')){w++;msg='You win the round!';}
     else{l++;msg='AI wins the round…';}
-    ui.score(w*100);draw();
-    setTimeout(()=>{if(round>=10)ui.over(w*100);else{phase='pick';msg='Round '+(round+1)+'/10 — choose!';draw();}},1000);};
+    ui.score(w*100);
+    timeout=setTimeout(()=>{if(dead)return;if(round>=10)ui.over(w*100);else{phase='pick';msg='Round '+(round+1)+'/10 — choose!';draw();}},1800);};
   cv.addEventListener('pointerdown',click);fresh();
-  return ()=>cv.removeEventListener('pointerdown',click);
+  return ()=>{dead=true;stop();clearTimeout(timeout);cv.removeEventListener('pointerdown',click);};
 });
+
 </script>
 
 <script>
@@ -1380,15 +1444,18 @@ reg('gbship','Battleship vs AI','🚢','board','Sink the AI fleet before it sink
         const cells=[];for(let i=0;i<sz;i++)cells.push([x+(horiz?i:0),y+(horiz?0:i)]);
         if(cells.every(cell=>!ships.flat().some(s=>s[0]===cell[0]&&s[1]===cell[1]))){ships.push(cells);placed=true;}}}
     return ships;}
-  let mine,foe,myShots,foShots,myTurn,alive,hunt,msg;
+  let mine,foe,myShots,foShots,myTurn,alive,hunt,msg,parts,dead,lastShot;
   function cellsLeft(ships,shots){let left=0;ships.forEach(s=>s.forEach(cell=>{if(!shots.some(h=>h[0]===cell[0]&&h[1]===cell[1]))left++;}));return left;}
-  function fresh(){mine=placeShips();foe=placeShips();myShots=[];foShots=[];myTurn=true;alive=true;hunt=[];msg='Your turn — tap the top grid!';ui.score(0);}
-  function aiShot(){if(!alive)return;
+  function fresh(){mine=placeShips();foe=placeShips();myShots=[];foShots=[];myTurn=true;alive=true;hunt=[];msg='Your turn — tap the top grid!';parts=[];dead=false;lastShot=null;ui.score(0);}
+  function burst(x,y,hit){for(let i=0;i<16;i++)parts.push({x,y,vx:rnd(-140,140),vy:rnd(-140,140),a:1,hit,ring:0});
+    parts.push({x,y,vx:0,vy:0,a:1,hit,ring:1});}
+  function aiShot(){if(!alive||dead)return;
     let shot=null;
     while(hunt.length){const cand=hunt.pop();if(!foShots.some(h=>h[0]===cand[0]&&h[1]===cand[1])){shot=cand;break;}}
     if(!shot){do{shot=[ri(0,N-1),ri(0,N-1)];}while(foShots.some(h=>h[0]===shot[0]&&h[1]===shot[1]));}
-    foShots.push(shot);
+    foShots.push(shot);lastShot={x:shot[0],y:shot[1],board:'mine'};
     const hit=mine.flat().some(cell=>cell[0]===shot[0]&&cell[1]===shot[1]);
+    burst(OX+shot[0]*CS+CS/2,382+shot[1]*CS+CS/2,hit);
     if(hit){[[1,0],[-1,0],[0,1],[0,-1]].forEach(d=>{const nx=shot[0]+d[0],ny=shot[1]+d[1];if(nx>=0&&ny>=0&&nx<N&&ny<N)hunt.push([nx,ny]);});msg='AI hit your ship!';}
     else msg='AI missed — your turn!';
     if(!cellsLeft(mine,foShots)){alive=false;ui.over(myShots.filter(s=>foe.flat().some(cell=>cell[0]===s[0]&&cell[1]===s[1])).length*100);return;}
@@ -1398,6 +1465,8 @@ reg('gbship','Battleship vs AI','🚢','board','Sink the AI fleet before it sink
     drawBoard(OX,50,foe,myShots,false);
     fitText(c,'🛡️ YOUR FLEET',240,360,400,'800 18px sans-serif','#7ee787');
     drawBoard(OX,382,mine,foShots,true);
+    parts.forEach(p=>{if(p.ring){c.strokeStyle=p.hit?'#ff2d78':'#3b82f6';c.lineWidth=3;c.globalAlpha=Math.max(0,p.a);c.beginPath();c.arc(p.x,p.y,(1-p.a)*28+6,0,7);c.stroke();}
+      else{c.globalAlpha=Math.max(0,p.a);c.fillStyle=p.hit?'#f97316':'#60a5fa';c.fillRect(p.x,p.y,5,5);}});c.globalAlpha=1;
     fitText(c,msg,240,540,440,'16px sans-serif','#ffe14d');
     ui.score(myShots.filter(s=>foe.flat().some(cell=>cell[0]===s[0]&&cell[1]===s[1])).length*100);}
   function drawBoard(ox,oy,ships,shots,showShips){
@@ -1408,19 +1477,23 @@ reg('gbship','Battleship vs AI','🚢','board','Sink the AI fleet before it sink
       c.beginPath();c.roundRect(ox+x*CS,oy+y*CS,CS-2,CS-2,4);c.fill();
       if(shot&&isShip){c.fillStyle='#fff';fitText(c,'✕',ox+x*CS+CS/2,oy+y*CS+CS/2,24,'800 20px sans-serif');}
       if(shot&&!isShip){c.fillStyle='#fff';c.beginPath();c.arc(ox+x*CS+CS/2,oy+y*CS+CS/2,4,0,7);c.fill();}}}
+  const stop=loop(dt=>{if(dead)return;
+    parts.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.a-=dt*1.2;});parts=parts.filter(p=>p.a>0);draw();},()=>{});
   const click=e=>{if(!alive||!myTurn)return;const r=cv.getBoundingClientRect();
     const mx=(e.clientX-r.left)*cv.width/r.width,my=(e.clientY-r.top)*cv.height/r.height;
     const x=Math.floor((mx-OX)/CS),y=Math.floor((my-50)/CS);
     if(x<0||y<0||x>=N||y>=N)return;
     if(myShots.some(h=>h[0]===x&&h[1]===y))return;
-    myShots.push([x,y]);
+    myShots.push([x,y]);lastShot={x,y,board:'foe'};
     const hit=foe.flat().some(cell=>cell[0]===x&&cell[1]===y);
+    burst(OX+x*CS+CS/2,50+y*CS+CS/2,hit);
     if(!cellsLeft(foe,myShots)){alive=false;ui.over(myShots.filter(s=>foe.flat().some(cell=>cell[0]===s[0]&&cell[1]===s[1])).length*100+500);draw();return;}
     if(hit){msg='HIT! Fire again!';draw();}
-    else{msg='Miss… AI is firing…';myTurn=false;draw();setTimeout(()=>{if(alive)aiShot();},650);}};
+    else{msg='Miss… AI is firing…';myTurn=false;draw();setTimeout(()=>{if(alive&&!dead)aiShot();},650);}};
   cv.addEventListener('pointerdown',click);fresh();draw();
-  return ()=>{alive=false;cv.removeEventListener('pointerdown',click);};
+  return ()=>{dead=true;stop();alive=false;cv.removeEventListener('pointerdown',click);};
 });
+
 /* --- Drift Racer (Mini 3D & Racing) --- */
 LB.seeds['gdrift']=seed([4200,3400,2600,1900,1300,800,400]);
 reg('gdrift','Drift Racer','🏎️','race','Dodge traffic, grab coins, boost for nitro points — near-misses pay extra!',(c,ui)=>{
@@ -1634,9 +1707,9 @@ LB.seeds['gcheck']=seed([1800,1400,1000,700,400,200,100]);
 reg('gcheck','Checkers vs AI','♟️','classic','Jump the AI\'s pieces and reach the far side to become king!',(c,ui)=>{
   sizeCanvas(420,480);ui.hint('Tap one of your red pieces, then tap a highlighted move');
   const N=8,CELL=50,OX=10,OY=40;
-  let board,sel,moves,turn,alive,msg;
+  let board,sel,moves,turn,alive,msg,last,lastT,dead;
   function fresh(){board=[];for(let y=0;y<N;y++){board.push([]);for(let x=0;x<N;x++){if((x+y)%2===1&&y<3)board[y].push('b');else if((x+y)%2===1&&y>4)board[y].push('r');else board[y].push('');}}
-    sel=null;moves=[];turn='r';alive=true;msg='Your turn — tap a red piece';ui.score(0);draw();}
+    sel=null;moves=[];turn='r';alive=true;last=null;lastT=0;dead=false;msg='Your turn — tap a red piece';ui.score(0);draw();}
   function pieceMoves(x,y){const p=board[y][x];if(!p)return[];const dirs=p==='r'||p==='R'?[[ -1,-1],[1,-1]]:[];const dirsB=p==='b'||p==='B'?[[-1,1],[1,1]]:[];const all=[...dirs,...dirsB];if(p==='R'||p==='B')all.push([-1,1],[1,1],[-1,-1],[1,-1]);
     const out=[];all.forEach(d=>{const nx=x+d[0],ny=y+d[1];if(nx>=0&&nx<N&&ny>=0&&ny<N&&!board[ny][nx])out.push([nx,ny,null]);
       const jx=x+d[0]*2,jy=y+d[1]*2;if(jx>=0&&jx<N&&jy>=0&&jy<N&&!board[jy][jx]&&board[ny]&&board[ny][nx]&&(board[ny][nx][0]!==p[0]))out.push([jx,jy,[nx,ny]]);});
@@ -1647,25 +1720,26 @@ reg('gcheck','Checkers vs AI','♟️','classic','Jump the AI\'s pieces and reac
     for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(board[y][x]&&board[y][x][0]==='b')pieceMoves(x,y).forEach(m=>options.push({x,y,m}));
     const caps=options.filter(o=>o.m[2]);if(caps.length)options=caps;
     if(!options.length){alive=false;ui.over(count('r')*100+500);return;}
-    const o=options[ri(0,options.length-1)];const p=board[o.y][o.x];board[o.y][o.x]='';board[o.m[1]][o.m[0]]=p;if(o.m[2])board[o.m[2][1]][o.m[2][0]]='';
+    const o=options[ri(0,options.length-1)];const p=board[o.y][o.x];board[o.y][o.x]='';board[o.m[1]][o.m[0]]=p;last=[o.m[0],o.m[1]];lastT=0;if(o.m[2])board[o.m[2][1]][o.m[2][0]]='';
     if(o.m[1]===N-1&&p==='b')board[o.m[1]][o.m[0]]='B';
     if(endCheck()){draw();return;}turn='r';msg='Your turn — tap a red piece';draw();}
   function draw(){c.fillStyle='#0d0d18';c.fillRect(0,0,420,480);
     for(let y=0;y<N;y++)for(let x=0;x<N;x++){c.fillStyle=(x+y)%2?'#1e293b':'#e2e8f0';c.fillRect(OX+x*CELL,OY+y*CELL,CELL,CELL);
       if(sel&&sel[0]===x&&sel[1]===y){c.strokeStyle='#00f0ff';c.lineWidth=3;c.strokeRect(OX+x*CELL+2,OY+y*CELL+2,CELL-4,CELL-4);c.lineWidth=1;}}
     moves.forEach(m=>{c.fillStyle='#22c55e';c.beginPath();c.arc(OX+m[0]*CELL+CELL/2,OY+m[1]*CELL+CELL/2,8,0,7);c.fill();});
-    for(let y=0;y<N;y++)for(let x=0;x<N;x++){const p=board[y][x];if(p){c.fillStyle=p[0]==='r'?'#ef4444':'#111827';c.beginPath();c.arc(OX+x*CELL+CELL/2,OY+y*CELL+CELL/2,20,0,7);c.fill();c.strokeStyle='#fff';c.stroke();if(p==='R'||p==='B')fitText(c,'♛',OX+x*CELL+CELL/2,OY+y*CELL+CELL/2,30,'20px sans-serif','#ffe14d');}}
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){const p=board[y][x];if(p){let sc=1;if(last&&last[0]===x&&last[1]===y){const pp=Math.min(1,lastT/0.3);sc=0.5+0.6*(1-Math.pow(1-pp,3));}c.fillStyle=p[0]==='r'?'#ef4444':'#111827';c.beginPath();c.arc(OX+x*CELL+CELL/2,OY+y*CELL+CELL/2,20*sc,0,7);c.fill();c.strokeStyle='#fff';c.stroke();if(p==='R'||p==='B')fitText(c,'♛',OX+x*CELL+CELL/2,OY+y*CELL+CELL/2,30,'20px sans-serif','#ffe14d');}}
     fitText(c,msg,210,460,400,'15px sans-serif','#ffe14d');}
+  const stop=loop(dt=>{if(dead)return;lastT+=dt;draw();},()=>{});
   const click=e=>{if(!alive||turn!=='r')return;const r=cv.getBoundingClientRect();
     const mx=(e.clientX-r.left)*cv.width/r.width,my=(e.clientY-r.top)*cv.height/r.height;
     const x=Math.floor((mx-OX)/CELL),y=Math.floor((my-OY)/CELL);if(x<0||y<0||x>=N||y>=N)return;
     const mv=moves.find(m=>m[0]===x&&m[1]===y);
     if(mv){const p=board[sel[1]][sel[0]];board[sel[1]][sel[0]]='';board[y][x]=p;if(mv[2])board[mv[2][1]][mv[2][0]]='';
-      if(y===0&&p==='r')board[y][x]='R';sel=null;moves=[];
+      if(y===0&&p==='r')board[y][x]='R';last=[x,y];lastT=0;sel=null;moves=[];
       if(endCheck()){draw();return;}turn='b';msg='AI is thinking…';draw();setTimeout(()=>{if(alive)aiMove();},600);return;}
     if(board[y][x]&&board[y][x][0]==='r'){sel=[x,y];moves=pieceMoves(x,y);draw();}};
   cv.addEventListener('pointerdown',click);fresh();
-  return ()=>{alive=false;cv.removeEventListener('pointerdown',click);};
+  return ()=>{dead=true;stop();cv.removeEventListener('pointerdown',click);};
 });
 </script>
 
