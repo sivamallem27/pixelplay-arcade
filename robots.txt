@@ -1,2 +1,4 @@
 User-agent: *
 Allow: /
+
+Sitemap: https://pixelplay-arcade-sivamallem27.vercel.app/sitemap.xml
