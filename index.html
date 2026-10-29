@@ -1111,25 +1111,36 @@ reg('gball','Ball Roll 3D','🔮','race','Roll down the track, grab coins, dodge
   sizeCanvas(420,560);ui.hint('◀ ▶ / A D / drag to steer the ball');
   const W=420,H=560;let bx,items,dist,alive,speed,t,coins;
   function fresh(){bx=0;items=[];dist=0;alive=true;speed=10;t=0;coins=0;ui.score(0);}
+  // Same bug as Cube Runner: proj() keeps every item at y=347, so items only
+  // grow in place at the horizon and the player ball sits on top of them.
+  // Map depth to a real approach: far = horizon (y 347), near = bottom (y 460).
+  function approachY(z){return H*0.62+(460-H*0.62)*(1-z/60);}
   function update(dt){if(!alive)return;dist+=dt*10;speed+=dt*0.3;t+=dt;
     if(t>0.5){t=0;const r=Math.random();
       if(r<0.55)items.push({type:'coin',x:rnd(-2.4,2.4),z:60});
       else items.push({type:'gap',x:rnd(-1.8,1.8),w:rnd(1.2,2),z:60});}
     items.forEach(k=>k.z-=speed*dt*6);items=items.filter(k=>k.z>2);
-    items.forEach(k=>{if(!k.hit&&k.z<9&&k.z>4){
+    items.forEach(k=>{if(!k.hit&&k.z<5.5){
       if(k.type==='coin'&&Math.abs(k.x-bx)<0.9){k.hit=true;coins++;ui.score(coins*100);}
       if(k.type==='gap'&&Math.abs(k.x-bx)<k.w/2){alive=false;ui.over(coins*100);}}});
     items=items.filter(k=>!k.hit);}
   function draw(){c.fillStyle='#0a1a2a';c.fillRect(0,0,W,H);
     const tr=proj(0,0,60,W,H),tl=proj(-3.4,0,60,W,H),trr=proj(3.4,0,60,W,H);
     c.fillStyle='#134';c.beginPath();c.moveTo(W/2-260,H);c.lineTo(tl.x,tl.y);c.lineTo(trr.x,trr.y);c.lineTo(W/2+260,H);c.closePath();c.fill();
-    c.strokeStyle='#00f0ff';[60,30,15,8,4].forEach(z=>{const a=proj(-3.4,0,z,W,H),b=proj(3.4,0,z,W,H);
-      c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);c.stroke();});
-    items.sort((a,b)=>a.z-b.z).forEach(k=>{const p=proj(k.x,0,k.z,W,H);
-      if(k.type==='coin'){c.fillStyle='#ffe14d';c.beginPath();c.arc(p.x,p.y,p.s*0.55,0,7);c.fill();}
-      else{const hw=p.s*k.w/2;c.fillStyle='#000';c.fillRect(p.x-hw,p.y-p.s*0.4,hw*2,p.s*0.8);}});
-    const bp=proj(bx,0.5,7,W,H);
-    c.fillStyle='#ff2d78';c.beginPath();c.arc(bp.x,bp.y,bp.s*0.7,0,7);c.fill();
+    c.strokeStyle='#00f0ff';[60,30,15,8,4].forEach(z=>{const y=approachY(z),hw=28+(260-28)*(1-z/60);
+      c.beginPath();c.moveTo(W/2-hw,y);c.lineTo(W/2+hw,y);c.stroke();});
+    // Far items first, near items last, so approaching items are never
+    // hidden behind the player while they are still far away.
+    items.sort((a,b)=>b.z-a.z).forEach(k=>{const p=proj(k.x,0,k.z,W,H),y=approachY(k.z);
+      if(k.type==='coin'){c.fillStyle='#ffe14d';c.beginPath();c.arc(p.x,y,p.s*0.55,0,7);c.fill();
+        c.fillStyle='rgba(255,255,255,.7)';c.beginPath();c.arc(p.x-p.s*0.18,y-p.s*0.18,p.s*0.15,0,7);c.fill();}
+      else{const hw=p.s*k.w/2;c.fillStyle='#000';c.fillRect(p.x-hw,y-p.s*0.4,hw*2,p.s*0.8);}});
+    // Player ball at the BOTTOM, small, so gaps/coins travel down the
+    // screen towards it and stay visible until the hit/collect moment.
+    const px=W/2+bx*91,py=H-90;
+    c.fillStyle='rgba(0,0,0,.4)';c.beginPath();c.ellipse(px,py+30,28,7,0,0,7);c.fill();
+    c.fillStyle='#ff2d78';c.beginPath();c.arc(px,py,28,0,7);c.fill();
+    c.fillStyle='rgba(255,255,255,.7)';c.beginPath();c.arc(px-9,py-9,8,0,7);c.fill();
     fitText(c,'🪙 '+coins,W/2,44,240,'800 26px sans-serif','#ffe14d');}
   const stop=loop(dt=>{update(dt);draw();},()=>{});
   const keys={};
@@ -1151,23 +1162,29 @@ reg('gspace','Space Blaster 3D','🌌','race','Enemies warp toward you — blast
   const W=420,H=560;let px,stars,foes,bullets,kills,alive,t;
   function fresh(){px=W/2;stars=[];foes=[];bullets=[];kills=0;alive=true;t=0;
     for(let i=0;i<90;i++)stars.push({x:rnd(0,W),y:rnd(0,H),z:rnd(1,10)});ui.score(0);}
+  // Foes used to sit at y=347 (proj horizon) and only grow in place, so
+  // they never visibly flew towards the player ship at the bottom.
+  // Now they travel down the screen as z falls: horizon -> just above ship.
+  function foePos(f){const p=proj((f.x-W/2)/40,0,f.z,W,H);
+    return {x:p.x,y:H*0.62+(430-H*0.62)*(1-f.z/60),s:p.s};}
   function update(dt){if(!alive)return;t+=dt;
     stars.forEach(s=>{s.y+=s.z*30*dt;if(s.y>H){s.y=0;s.x=rnd(0,W);}});
     if(t>0.7){t=0;foes.push({x:rnd(40,W-40),z:60,hp:2});}
     foes.forEach(f=>{f.z-=14*dt;});
     bullets=bullets.filter(b=>{b.y-=520*dt;return b.y>-10;});
-    bullets.forEach(b=>{foes.forEach(f=>{if(f.hp>0){const p=proj((f.x-W/2)/40,0,f.z,W,H);
+    bullets.forEach(b=>{foes.forEach(f=>{if(f.hp>0){const p=foePos(f);
       if(Math.hypot(b.x-p.x,b.y-p.y)<p.s*1.2+6){f.hp--;b.dead=true;
         if(f.hp<=0){kills++;ui.score(kills*100);}}}});});
     bullets=bullets.filter(b=>!b.dead);foes=foes.filter(f=>f.hp>0&&f.z>3);
     if(Math.random()<dt*6)bullets.push({x:px,y:H-90});
-    if(foes.some(f=>{const p=proj((f.x-W/2)/40,0,f.z,W,H);return f.z<7&&Math.abs(p.x-px)<30;})){
+    if(foes.some(f=>{const p=foePos(f);return f.z<6&&Math.abs(p.x-px)<30;})){
       alive=false;ui.over(kills*100);}}
   function draw(){c.fillStyle='#020208';c.fillRect(0,0,W,H);
     c.fillStyle='#fff';stars.forEach(s=>{c.globalAlpha=clamp(s.z/10,0.2,1);c.fillRect(s.x,s.y,2,2);});c.globalAlpha=1;
-    foes.forEach(f=>{const p=proj((f.x-W/2)/40,0,f.z,W,H),sz=p.s*1.6;
+    foes.sort((a,b)=>b.z-a.z).forEach(f=>{const p=foePos(f),sz=p.s*1.6;
       c.fillStyle=f.hp>1?'#ff2d78':'#f59e0b';
-      c.beginPath();c.moveTo(p.x,p.y-sz);c.lineTo(p.x+sz,p.y+sz*0.6);c.lineTo(p.x-sz,p.y+sz*0.6);c.closePath();c.fill();});
+      c.beginPath();c.moveTo(p.x,p.y-sz);c.lineTo(p.x+sz,p.y+sz*0.6);c.lineTo(p.x-sz,p.y+sz*0.6);c.closePath();c.fill();
+      c.fillStyle='#fff';c.beginPath();c.arc(p.x,p.y,Math.max(2,sz*0.18),0,7);c.fill();});
     c.fillStyle='#ffe14d';bullets.forEach(b=>c.fillRect(b.x-2,b.y-8,4,14));
     c.fillStyle='#00f0ff';c.beginPath();c.moveTo(px,H-110);c.lineTo(px-16,H-70);c.lineTo(px+16,H-70);c.closePath();c.fill();
     fitText(c,'💥 '+kills,W/2,40,200,'800 24px sans-serif','#ffe14d');}
