@@ -217,11 +217,11 @@ function seed(scores){return scores.map((s,i)=>({n:RIVALS[i%RIVALS.length],s}));
 
 /* ================= game registry ================= */
 const CATS=[
- {id:'puzzle',name:'🧩 Puzzle',desc:'Brain teasers to warm up your mind'},
- {id:'classic',name:'👾 Classic Arcade',desc:'The timeless legends, remade'},
- {id:'reflex',name:'⚡ Reflex & Speed',desc:'How fast are your fingers?'},
- {id:'board',name:'🃏 Board & Cards',desc:'Outsmart the AI across the table'},
- {id:'race',name:'🏎️ Mini 3D & Racing',desc:'Pseudo-3D speed and dodging'},
+ {id:'puzzle',name:'Puzzle',desc:'Brain teasers to warm up your mind'},
+ {id:'classic',name:'Classic Arcade',desc:'The timeless legends, remade'},
+ {id:'reflex',name:'Reflex & Speed',desc:'How fast are your fingers?'},
+ {id:'board',name:'Board & Cards',desc:'Outsmart the AI across the table'},
+ {id:'race',name:'Mini 3D & Racing',desc:'Pseudo-3D speed and dodging'},
 ];
 const GAMES=[]; // {id,name,icon,cat,desc,make(c,ui)}
 function reg(id,name,icon,cat,desc,make){GAMES.push({id,name,icon,cat,desc,make});}
@@ -428,7 +428,7 @@ reg('gmatch','Memory Match','🃏','puzzle','Find all 8 pairs. Fewer moves = hig
 });
 /* --- Minesweeper Mini --- */
 LB.seeds['gmines']=seed([980,860,740,620,500,380,260]);
-reg('gmines','Minesweeper Mini','💣','puzzle','Clear the 8×8 field. 10 mines hide inside. Toggle 🚩 to flag.',(c,ui)=>{
+reg('gmines','Minesweeper Mini','💣','puzzle','Clear the 8×8 field. 10 mines hide inside. Toggle flag mode to mark mines.',(c,ui)=>{
   sizeCanvas(420,500);ui.hint('Tap: reveal · 🚩 mode: flag · find all safe cells');
   const N=8,MINES=10,cell=48,ox=18,oy=60;let board,over,win,flagMode,cleared;
   function fresh(){board=Array.from({length:N},()=>Array.from({length:N},()=>({m:false,open:false,flag:false,n:0})));
